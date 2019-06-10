@@ -38,7 +38,7 @@ namespace CustomBuildTasks
                     var content = File.ReadAllText(compileFile).Replace("{{VALUE}}", "Hello World!");
 
                     var generatedFile = Regex.Replace(compileFile, ".cs$", ".g.cs");
-                    File.WriteAllText(generatedFile, "/* GENERATED */" + CRLF + content);
+                    File.WriteAllText(generatedFile, content);
                 }
                 catch (Exception ex)
                 {
