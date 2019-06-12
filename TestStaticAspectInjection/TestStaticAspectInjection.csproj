@@ -49,7 +49,7 @@
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <Target Name="BeforeBuild">
-    <InjectHooksTask Inputs="@(Compile)" ContinueOnError="true">
+    <InjectHooksTask Inputs="@(Compile)">
       <Output TaskParameter="Outputs" ItemName="Generated4Compile" />
     </InjectHooksTask>
     <ItemGroup>

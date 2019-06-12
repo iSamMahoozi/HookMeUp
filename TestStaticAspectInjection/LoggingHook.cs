@@ -1,4 +1,5 @@
-﻿using CustomBuildTasks;
+﻿using System;
+using CustomBuildTasks;
 
 namespace TestStaticAspectInjection
 {
@@ -7,7 +8,7 @@ namespace TestStaticAspectInjection
         public override void OnEntry()
         {
 #warning As a test we are simply replacing {{VALUE}} with Hello World
-            System.Console.WriteLine("{{VALUE}}");
+            Console.WriteLine("{{VALUE}}");
         }
     }
 }
