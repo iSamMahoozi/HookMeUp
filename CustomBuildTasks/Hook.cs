@@ -1,7 +1,19 @@
-﻿namespace CustomBuildTasks
+﻿using System;
+
+namespace CustomBuildTasks
 {
     public abstract class Hook : IHook
     {
-        public virtual void OnEntry() { }
+        public virtual void OnEnter(HookingContext context) { }
+        public virtual void OnExit(HookingContext context) { }
+        public virtual bool HandleException(HookingContext context, Exception ex, bool isCaught)
+        {
+            return isCaught;
+        }
+
+        public virtual bool ShouldHook(HookPoint point)
+        {
+            return true;
+        }
     }
 }
