@@ -6,10 +6,7 @@ namespace TestStaticAspectInjection
     {
         private static void Main()
         {
-            Console.WriteLine("Attach Debugger");
-            Console.ReadLine();
-
-            new LoggingHook().OnEnter(null);
+            Console.WriteLine("Application is running...");
             Console.ReadLine();
         }
     }

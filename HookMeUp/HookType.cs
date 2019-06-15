@@ -1,4 +1,4 @@
-﻿namespace CustomBuildTasks
+﻿namespace HookMeUp
 {
     public enum HookType
     {

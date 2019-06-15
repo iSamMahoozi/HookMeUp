@@ -1,15 +1,17 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
 using System.Text.RegularExpressions;
 using Microsoft.Build.Framework;
 using Microsoft.Build.Tasks;
 using Microsoft.Build.Utilities;
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 
-namespace CustomBuildTasks
+namespace Hookr
 {
-    public sealed class InjectHooksTask : Task
+    public sealed class HookTask : Task
     {
         [Required]
 #warning Can we handle Wildcards or are they automatically expanded?
@@ -25,7 +27,7 @@ namespace CustomBuildTasks
 
         public override bool Execute()
         {
-            // Debugger.Launch();
+            // System.Diagnostics.Debugger.Launch();
             var CRLF = Environment.NewLine;
             var compileFiles = Inputs.Split(';');
             foreach (var compileFile in compileFiles)

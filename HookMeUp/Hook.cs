@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace CustomBuildTasks
+namespace HookMeUp
 {
     public abstract class Hook : IHook
     {

@@ -1,5 +1,5 @@
 ﻿using System;
-using CustomBuildTasks;
+using HookMeUp;
 
 namespace TestStaticAspectInjection
 {

@@ -1,7 +1,7 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
-  <UsingTask TaskName="CustomBuildTasks.InjectHooksTask" AssemblyFile="$(OutDir)CustomBuildTasks.dll" />
+  <UsingTask TaskName="Hookr.HookTask" AssemblyFile="$(OutDir)Hookr.dll" />
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
@@ -34,7 +34,6 @@
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="LoggingHook.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
@@ -42,16 +41,16 @@
     <None Include="App.config" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\CustomBuildTasks\CustomBuildTasks.csproj">
-      <Project>{5c8aa682-55da-4e50-905b-e339f1b0bbff}</Project>
-      <Name>CustomBuildTasks</Name>
+    <ProjectReference Include="..\Hookr\Hookr.csproj">
+      <Project>{45c615f2-a9f6-4082-8f77-2543bf2fb3e8}</Project>
+      <Name>Hookr</Name>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <Target Name="BeforeBuild">
-    <InjectHooksTask Inputs="@(Compile)">
+    <HookTask Inputs="@(Compile)">
       <Output TaskParameter="Outputs" ItemName="Generated4Compile" />
-    </InjectHooksTask>
+    </HookTask>
     <ItemGroup>
       <Compile Remove="@(Compile)" />
       <Compile Include="@(Generated4Compile)" />

@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Runtime.Serialization;
 
-namespace CustomBuildTasks
+namespace HookMeUp
 {
     // TODO: Allow Hook to throw exceptions ONLY by embedding them in a HookException and throwing that
     [Serializable]

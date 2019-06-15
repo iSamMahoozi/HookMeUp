@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace CustomBuildTasks
+namespace HookMeUp
 {
     // TODO: Add async alternatives (should they only be allowed within async HookPoints?)
     public interface IHook
