@@ -13,6 +13,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "LoggingHook", "LoggingHook\
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TestApplication", "TestApplication\TestApplication.csproj", "{26141D51-04FE-4847-BF0C-32744286CE75}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Hookr.Strut", "Hookr.Strut\Hookr.Strut.csproj", "{08A27A32-4C11-476C-8330-69D33C1EC786}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -35,6 +37,10 @@ Global
 		{26141D51-04FE-4847-BF0C-32744286CE75}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{26141D51-04FE-4847-BF0C-32744286CE75}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{26141D51-04FE-4847-BF0C-32744286CE75}.Release|Any CPU.Build.0 = Release|Any CPU
+		{08A27A32-4C11-476C-8330-69D33C1EC786}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{08A27A32-4C11-476C-8330-69D33C1EC786}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{08A27A32-4C11-476C-8330-69D33C1EC786}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{08A27A32-4C11-476C-8330-69D33C1EC786}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

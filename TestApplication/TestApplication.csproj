@@ -41,14 +41,14 @@
     <None Include="App.config" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\Hookr\Hookr.csproj">
-      <Project>{45c615f2-a9f6-4082-8f77-2543bf2fb3e8}</Project>
-      <Name>Hookr</Name>
+    <ProjectReference Include="..\HookMeUp\HookMeUp.csproj">
+      <Project>{07d724f5-e9e3-421c-8521-02364f083217}</Project>
+      <Name>HookMeUp</Name>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <Target Name="BeforeBuild">
-    <HookTask Inputs="@(Compile)">
+    <HookTask Inputs="@(Compile)" HookrStrut="C:\Work\Repos\HookMeUp\Hookr.Strut\bin\Debug\netcoreapp2.2\win-x86\Hookr.Strut.exe">
       <Output TaskParameter="Outputs" ItemName="Generated4Compile" />
     </HookTask>
     <ItemGroup>
