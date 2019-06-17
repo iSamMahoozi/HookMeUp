@@ -14,15 +14,24 @@ namespace Hookr.Strut {
 	internal class Strutter : IDisposable {
 		private readonly string _inputFilename;
 		private CompilationUnitSyntax _root;
-		private Dictionary<MethodDeclarationSyntax, MethodDeclarationSyntax> _replacements;
+		private Dictionary<MethodDeclarationSyntax, MethodDeclarationSyntax> _methodReplacements;
 		private readonly string _hookContextName;
 		private readonly string _orgMethodLambdaName;
 
-		public Strutter(string inputFilename) {
-			_inputFilename = inputFilename;
+		public Strutter() {
 			_hookContextName = "hookContext";
 			_orgMethodLambdaName = "hookBody";
+			_methodReplacements = new Dictionary<MethodDeclarationSyntax, MethodDeclarationSyntax>();
 		}
+
+		public Strutter(string inputFilename) : this() {
+			_inputFilename = inputFilename;
+		}
+
+		internal Strutter(SourceText syntax) : this() {
+			_root = SyntaxFactory.ParseSyntaxTree(syntax).GetRoot() as CompilationUnitSyntax;
+		}
+
 
 		public Strutter ParseFile() {
 			var originalContent = File.ReadAllText(_inputFilename);
@@ -47,7 +56,7 @@ namespace Hookr.Strut {
 						SyntaxFactory.IdentifierName(nameof(Pimp)),
 						SyntaxFactory.IdentifierName(methodName)),
 					SyntaxFactory.ArgumentList(
-						SyntaxFactory.SeparatedList(args.ToArray())
+						SyntaxFactory.SeparatedList(args)
 						)
 					)
 				)
@@ -138,22 +147,20 @@ namespace Hookr.Strut {
 			BlockSyntax newMethodBody = SyntaxFactory.Block(actionOrFunc, hookContext, InvokeHookingContextStatement(nameof(Pimp.OnEnter)), tryStatement).WithTrailingTrivia(SyntaxFactory.CarriageReturnLineFeed);
 			var newMethod = SyntaxFactory.MethodDeclaration(method.AttributeLists, method.Modifiers, method.ReturnType, method.ExplicitInterfaceSpecifier, method.Identifier, method.TypeParameterList, method.ParameterList, method.ConstraintClauses, newMethodBody, null);
 
-			_replacements[method] = newMethod;
+			_methodReplacements[method] = newMethod;
 		}
 
+		private IEnumerable<MethodDeclarationSyntax> _Methods => _root.DescendantNodes().OfType<MethodDeclarationSyntax>();
 		public Strutter InjectIntoMethods() {
-			var methods = _root.DescendantNodes().OfType<MethodDeclarationSyntax>();
-			_replacements = new Dictionary<MethodDeclarationSyntax, MethodDeclarationSyntax>();
-
-			foreach (var method in methods) {
+			foreach (var method in _Methods) {
 				InjectIntoMethod(method);
 			}
 
 			return this;
 		}
 		public Strutter ReplaceMethods() {
-			if (_replacements.Any()) {
-				_root = _root.ReplaceNodes(_root.DescendantNodes().OfType<MethodDeclarationSyntax>(), (o, n) => _replacements[o]);
+			if (_methodReplacements.Any()) {
+				_root = _root.ReplaceNodes(_Methods, (o, n) => _methodReplacements[o]);
 				_root = _root.AddUsings(SyntaxFactory.UsingDirective(SyntaxFactory.IdentifierName("HookMeUp"))).NormalizeWhitespace();
 				_root = _root.AddUsings(SyntaxFactory.UsingDirective(SyntaxFactory.IdentifierName("System.Reflection"))).NormalizeWhitespace();
 			}
@@ -166,6 +173,8 @@ namespace Hookr.Strut {
 
 			return this;
 		}
+
+		private object ToDump() => _root.ToFullString();
 
 		public void Dispose() {
 			Dispose(true);
