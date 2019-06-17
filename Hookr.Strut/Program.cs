@@ -21,9 +21,6 @@ namespace Hookr.Strut {
 			var syntax = SourceText.From(originalContent);
 			var root = SyntaxFactory.ParseSyntaxTree(syntax).GetRoot() as CompilationUnitSyntax;
 
-			root = root.AddUsings(SyntaxFactory.UsingDirective(SyntaxFactory.IdentifierName("HookMeUp"))).NormalizeWhitespace();
-			root = root.AddUsings(SyntaxFactory.UsingDirective(SyntaxFactory.IdentifierName("System.Reflection"))).NormalizeWhitespace();
-
 			var methods = root.DescendantNodes().OfType<MethodDeclarationSyntax>();
 			var replacements = new Dictionary<MethodDeclarationSyntax, MethodDeclarationSyntax>();
 
@@ -150,7 +147,12 @@ namespace Hookr.Strut {
 				var newMethod = SyntaxFactory.MethodDeclaration(method.AttributeLists, method.Modifiers, method.ReturnType, method.ExplicitInterfaceSpecifier, method.Identifier, method.TypeParameterList, method.ParameterList, method.ConstraintClauses, newMethodBody, null);
 				replacements[method] = newMethod;
 			}
-			root = root.ReplaceNodes(methods, (o, n) => replacements[o]);
+
+			if (replacements.Any()) {
+				root = root.ReplaceNodes(methods, (o, n) => replacements[o]);
+				root = root.AddUsings(SyntaxFactory.UsingDirective(SyntaxFactory.IdentifierName("HookMeUp"))).NormalizeWhitespace();
+				root = root.AddUsings(SyntaxFactory.UsingDirective(SyntaxFactory.IdentifierName("System.Reflection"))).NormalizeWhitespace();
+			}
 
 			var generatedFile = Regex.Replace(compileFile, ".cs$", ".g.cs");
 			File.WriteAllText(generatedFile, root.ToFullString());
