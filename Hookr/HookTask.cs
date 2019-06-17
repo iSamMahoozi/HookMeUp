@@ -33,12 +33,20 @@ namespace Hookr {
 
 					var originalContent = File.ReadAllText(compileFile);
 					var psi = new ProcessStartInfo {
+#if DEBUG
 						CreateNoWindow = false,
+#else
+						CreateNoWindow = true,
+#endif
 						FileName = HookrStrut,
 						Arguments = $"\"{compileFile}\"",
 						LoadUserProfile = false,
 						UseShellExecute = true,
+#if DEBUG
 						WindowStyle = ProcessWindowStyle.Normal,
+#else
+						WindowStyle = ProcessWindowStyle.Hidden,
+#endif
 						RedirectStandardError = false,
 						RedirectStandardOutput = false,
 					};
