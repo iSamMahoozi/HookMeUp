@@ -101,13 +101,17 @@ namespace Hookr.Strut {
 			}
 			var actionOrFunc = SyntaxFactory.LocalDeclarationStatement(
 				SyntaxFactory.VariableDeclaration(
-					(method.ReturnType as PredefinedTypeSyntax).Keyword.Kind() == SyntaxKind.VoidKeyword ? SyntaxFactory.IdentifierName(nameof(Action)) : SyntaxFactory.IdentifierName("Func"),
+					(method.ReturnType as PredefinedTypeSyntax).Keyword.Kind() == SyntaxKind.VoidKeyword ? (SimpleNameSyntax)SyntaxFactory.IdentifierName("Action") : (SimpleNameSyntax)SyntaxFactory.GenericName(
+						SyntaxFactory.Identifier("Func"))
+					.WithTypeArgumentList(
+						SyntaxFactory.TypeArgumentList(
+							SyntaxFactory.SingletonSeparatedList<TypeSyntax>(method.ReturnType))),
 					SyntaxFactory.SingletonSeparatedList(
-					SyntaxFactory.VariableDeclarator(_orgMethodLambdaName).WithInitializer(SyntaxFactory.EqualsValueClause(SyntaxFactory.ParenthesizedLambdaExpression(lamdbaExpression)))
-					))
-					).NormalizeWhitespace()
-				.WithLeadingTrivia(SyntaxFactory.Trivia(SyntaxFactory.LineDirectiveTrivia(SyntaxFactory.Token(SyntaxKind.HiddenKeyword), true).NormalizeWhitespace().WithLeadingTrivia(SyntaxFactory.CarriageReturnLineFeed)))
-				;
+						SyntaxFactory.VariableDeclarator("body").WithInitializer(SyntaxFactory.EqualsValueClause(SyntaxFactory.ParenthesizedLambdaExpression(lamdbaExpression)))
+						)))
+				.NormalizeWhitespace()
+				.WithLeadingTrivia(SyntaxFactory.Trivia(SyntaxFactory.LineDirectiveTrivia(SyntaxFactory.Token(SyntaxKind.HiddenKeyword), true).NormalizeWhitespace().WithLeadingTrivia(SyntaxFactory.CarriageReturnLineFeed)));
+
 			var tryStatement = SyntaxFactory.TryStatement(
 				SyntaxFactory.Block(
 					SyntaxFactory.ExpressionStatement(
