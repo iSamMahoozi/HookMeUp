@@ -101,7 +101,7 @@ namespace Hookr.Strut {
 			}
 			var actionOrFunc = SyntaxFactory.LocalDeclarationStatement(
 				SyntaxFactory.VariableDeclaration(
-					(method.ReturnType as PredefinedTypeSyntax).Keyword.Kind() == SyntaxKind.VoidKeyword ? (SimpleNameSyntax)SyntaxFactory.IdentifierName("Action") : (SimpleNameSyntax)SyntaxFactory.GenericName(
+					(method.ReturnType as PredefinedTypeSyntax)?.Keyword.Kind() == SyntaxKind.VoidKeyword ? (SimpleNameSyntax)SyntaxFactory.IdentifierName("Action") : (SimpleNameSyntax)SyntaxFactory.GenericName(
 						SyntaxFactory.Identifier("Func"))
 					.WithTypeArgumentList(
 						SyntaxFactory.TypeArgumentList(
@@ -114,8 +114,9 @@ namespace Hookr.Strut {
 
 			var tryStatement = SyntaxFactory.TryStatement(
 				SyntaxFactory.Block(
-					SyntaxFactory.ExpressionStatement(
-						SyntaxFactory.InvocationExpression(SyntaxFactory.IdentifierName(_orgMethodLambdaName)))
+					(method.ReturnType as PredefinedTypeSyntax)?.Keyword.Kind() == SyntaxKind.VoidKeyword ?
+						(StatementSyntax)SyntaxFactory.ExpressionStatement(SyntaxFactory.InvocationExpression(SyntaxFactory.IdentifierName(_orgMethodLambdaName))) :
+						(StatementSyntax)SyntaxFactory.ReturnStatement(SyntaxFactory.InvocationExpression(SyntaxFactory.IdentifierName(_orgMethodLambdaName)))
 						.NormalizeWhitespace()
 						.WithLeadingTrivia(SyntaxFactory.CarriageReturnLineFeed)
 						.WithTrailingTrivia(SyntaxFactory.CarriageReturnLineFeed)
