@@ -7,6 +7,12 @@ namespace HookMeUp {
 
 		}
 
+		public HookingContext WithReturnValue(object returnValue) {
+			ReturnValue = returnValue;
+			return this;
+		}
+
+		public object ReturnValue { get; private set; }
 		public HookPoint HookPoint { get; }
 		public HookFlow Flow { get; }
 	}

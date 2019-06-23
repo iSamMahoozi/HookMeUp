@@ -12,33 +12,24 @@ using Microsoft.CodeAnalysis.Text;
 
 namespace Hookr.Strut {
 	internal class Strutter : IDisposable {
-		private readonly string _inputFilename;
+		private readonly SyntaxTree _tree;
 		private CompilationUnitSyntax _root;
+
 		private Dictionary<MethodDeclarationSyntax, MethodDeclarationSyntax> _methodReplacements;
+
 		private readonly string _hookContextName;
 		private readonly string _orgMethodLambdaName;
 
 		public Strutter() {
 			_hookContextName = "hookContext";
-			_orgMethodLambdaName = "hookBody";
+			_orgMethodLambdaName = "orgMethodBody";
 			_methodReplacements = new Dictionary<MethodDeclarationSyntax, MethodDeclarationSyntax>();
 		}
 
-		public Strutter(string inputFilename) : this() {
-			_inputFilename = inputFilename;
-		}
-
-		internal Strutter(SourceText syntax) : this() {
-			_root = SyntaxFactory.ParseSyntaxTree(syntax).GetRoot() as CompilationUnitSyntax;
-		}
-
-
-		public Strutter ParseFile() {
-			var originalContent = File.ReadAllText(_inputFilename);
-			var syntax = SourceText.From(originalContent);
-			_root = SyntaxFactory.ParseSyntaxTree(syntax).GetRoot() as CompilationUnitSyntax;
-
-			return this;
+		public Strutter(string fileContent) : this() {
+			var syntax = SourceText.From(fileContent);
+			_tree = SyntaxFactory.ParseSyntaxTree(syntax);
+			_root = _tree.GetRoot() as CompilationUnitSyntax;
 		}
 
 		private ExpressionStatementSyntax InvokeHookingContextStatement(string methodName, string ex = null) {
@@ -116,7 +107,7 @@ namespace Hookr.Strut {
 						SyntaxFactory.TypeArgumentList(
 							SyntaxFactory.SingletonSeparatedList<TypeSyntax>(method.ReturnType))),
 					SyntaxFactory.SingletonSeparatedList(
-						SyntaxFactory.VariableDeclarator("body").WithInitializer(SyntaxFactory.EqualsValueClause(SyntaxFactory.ParenthesizedLambdaExpression(lamdbaExpression)))
+						SyntaxFactory.VariableDeclarator(_orgMethodLambdaName).WithInitializer(SyntaxFactory.EqualsValueClause(SyntaxFactory.ParenthesizedLambdaExpression(lamdbaExpression)))
 						)))
 				.NormalizeWhitespace()
 				.WithLeadingTrivia(SyntaxFactory.Trivia(SyntaxFactory.LineDirectiveTrivia(SyntaxFactory.Token(SyntaxKind.HiddenKeyword), true).NormalizeWhitespace().WithLeadingTrivia(SyntaxFactory.CarriageReturnLineFeed)));
@@ -125,7 +116,8 @@ namespace Hookr.Strut {
 				SyntaxFactory.Block(
 					(method.ReturnType as PredefinedTypeSyntax)?.Keyword.Kind() == SyntaxKind.VoidKeyword ?
 						(StatementSyntax)SyntaxFactory.ExpressionStatement(SyntaxFactory.InvocationExpression(SyntaxFactory.IdentifierName(_orgMethodLambdaName))) :
-						(StatementSyntax)SyntaxFactory.ReturnStatement(SyntaxFactory.InvocationExpression(SyntaxFactory.IdentifierName(_orgMethodLambdaName)))
+						(StatementSyntax)SyntaxFactory.ExpressionStatement(SyntaxFactory.InvocationExpression(SyntaxFactory.MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, SyntaxFactory.IdentifierName(_hookContextName), SyntaxFactory.IdentifierName(nameof(HookingContext.WithReturnValue)))).WithArgumentList(SyntaxFactory.ArgumentList(SyntaxFactory.SingletonSeparatedList(SyntaxFactory.Argument(SyntaxFactory.InvocationExpression(SyntaxFactory.IdentifierName(_orgMethodLambdaName)))))))
+						//(StatementSyntax)SyntaxFactory.ReturnStatement(SyntaxFactory.InvocationExpression(SyntaxFactory.IdentifierName(_orgMethodLambdaName)))
 						.NormalizeWhitespace()
 						.WithLeadingTrivia(SyntaxFactory.CarriageReturnLineFeed)
 						.WithTrailingTrivia(SyntaxFactory.CarriageReturnLineFeed)
@@ -144,7 +136,17 @@ namespace Hookr.Strut {
 				.WithTrailingTrivia(SyntaxFactory.CarriageReturnLineFeed)
 				;
 
-			BlockSyntax newMethodBody = SyntaxFactory.Block(actionOrFunc, hookContext, InvokeHookingContextStatement(nameof(Pimp.OnEnter)), tryStatement).WithTrailingTrivia(SyntaxFactory.CarriageReturnLineFeed);
+			var statements = new List<StatementSyntax> {
+				actionOrFunc,
+				hookContext,
+				InvokeHookingContextStatement(nameof(Pimp.OnEnter)),
+				tryStatement
+			};
+			if ((method.ReturnType as PredefinedTypeSyntax)?.Keyword.Kind() != SyntaxKind.VoidKeyword) {
+				statements.Add(SyntaxFactory.ReturnStatement(SyntaxFactory.CastExpression(method.ReturnType, SyntaxFactory.MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, SyntaxFactory.IdentifierName(_hookContextName), SyntaxFactory.IdentifierName(nameof(HookingContext.ReturnValue))))));
+			}
+
+			BlockSyntax newMethodBody = SyntaxFactory.Block(statements).WithTrailingTrivia(SyntaxFactory.CarriageReturnLineFeed);
 			var newMethod = SyntaxFactory.MethodDeclaration(method.AttributeLists, method.Modifiers, method.ReturnType, method.ExplicitInterfaceSpecifier, method.Identifier, method.TypeParameterList, method.ParameterList, method.ConstraintClauses, newMethodBody, null);
 
 			_methodReplacements[method] = newMethod;
@@ -160,15 +162,17 @@ namespace Hookr.Strut {
 		}
 		public Strutter ReplaceMethods() {
 			if (_methodReplacements.Any()) {
-				_root = _root.ReplaceNodes(_Methods, (o, n) => _methodReplacements[o]);
-				_root = _root.AddUsings(SyntaxFactory.UsingDirective(SyntaxFactory.IdentifierName("HookMeUp"))).NormalizeWhitespace();
-				_root = _root.AddUsings(SyntaxFactory.UsingDirective(SyntaxFactory.IdentifierName("System.Reflection"))).NormalizeWhitespace();
+				_root = _root.ReplaceNodes(_Methods, (o, n) => _methodReplacements[o])
+					.AddUsings(
+						SyntaxFactory.UsingDirective(SyntaxFactory.IdentifierName("HookMeUp")),
+						SyntaxFactory.UsingDirective(SyntaxFactory.IdentifierName("System.Reflection")))
+					.NormalizeWhitespace();
 			}
 
 			return this;
 		}
-		public Strutter WriteAllToFile() {
-			var generatedFile = Regex.Replace(_inputFilename, ".cs$", ".g.cs");
+		public Strutter WriteAllToFile(string inputFilename) {
+			var generatedFile = Regex.Replace(inputFilename, ".cs$", ".g.cs");
 			File.WriteAllText(generatedFile, _root.ToFullString());
 
 			return this;

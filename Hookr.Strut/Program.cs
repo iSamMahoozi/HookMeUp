@@ -9,12 +9,12 @@ namespace Hookr.Strut {
 			Console.ReadLine();
 #endif
 			if (args.Length > 0 && File.Exists(args[0])) {
-				using (var strut = new Strutter(args[0])) {
+				var fileContent = File.ReadAllText(args[0]);
+				using (var strut = new Strutter(fileContent)) {
 					strut
-						.ParseFile()
 						.InjectIntoMethods()
 						.ReplaceMethods()
-						.WriteAllToFile();
+						.WriteAllToFile(args[0]);
 				}
 
 			}
