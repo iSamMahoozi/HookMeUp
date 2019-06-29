@@ -10,7 +10,7 @@ namespace Hookr.Strut {
 #endif
 			if (args.Length > 0 && File.Exists(args[0])) {
 				var fileContent = File.ReadAllText(args[0]);
-				using (var strut = new Strutter(fileContent)) {
+				using (var strut = new Strutter(args[0], fileContent)) {
 					strut
 						.InjectIntoMethods()
 						.ReplaceMethods()

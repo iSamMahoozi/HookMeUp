@@ -19,6 +19,7 @@ namespace Hookr.Strut {
 
 		private readonly string _hookContextName;
 		private readonly string _orgMethodLambdaName;
+		private readonly string _fileName;
 
 		public Strutter() {
 			_hookContextName = "hookContext";
@@ -26,7 +27,9 @@ namespace Hookr.Strut {
 			_methodReplacements = new Dictionary<MethodDeclarationSyntax, MethodDeclarationSyntax>();
 		}
 
-		public Strutter(string fileContent) : this() {
+		public Strutter(string fileName, string fileContent) : this() {
+			_fileName = fileName;
+
 			var syntax = SourceText.From(fileContent);
 			_tree = SyntaxFactory.ParseSyntaxTree(syntax);
 			_root = _tree.GetRoot() as CompilationUnitSyntax;
@@ -86,13 +89,20 @@ namespace Hookr.Strut {
 					)
 				)
 				.NormalizeWhitespace()
-				.WithLeadingTrivia(SyntaxFactory.Trivia(SyntaxFactory.LineDirectiveTrivia(SyntaxFactory.Token(SyntaxKind.HiddenKeyword), true).NormalizeWhitespace().WithLeadingTrivia(SyntaxFactory.CarriageReturnLineFeed)))
 				;
+
+			var fileLinePos = _tree.GetLineSpan(method.Body != null ? method.Body.Statements.First().Span : method.ExpressionBody.Span);
+			var startLinePos = fileLinePos.StartLinePosition;
+			//var endLinePos = fileLinePos.EndLinePosition;
+			var startLine = startLinePos.Line;
+			var startCol = startLinePos.Character;
+			//var endLine = endLinePos.Line;
+			//var endCol = endLinePos.Character;
 
 			CSharpSyntaxNode lamdbaExpression;
 			if (method.Body?.Statements.Any() ?? false) {
 				lamdbaExpression = SyntaxFactory.Block(method.Body.Statements)
-					.WithOpenBraceToken(SyntaxFactory.Token(SyntaxKind.OpenBraceToken).WithTrailingTrivia(SyntaxFactory.Trivia(SyntaxFactory.LineDirectiveTrivia(SyntaxFactory.Token(SyntaxKind.DefaultKeyword), true).NormalizeWhitespace().WithLeadingTrivia(SyntaxFactory.CarriageReturnLineFeed))))
+					.WithOpenBraceToken(SyntaxFactory.Token(SyntaxKind.OpenBraceToken).WithTrailingTrivia(SyntaxFactory.Trivia(SyntaxFactory.LineDirectiveTrivia(SyntaxFactory.Literal(startLine), SyntaxFactory.Literal(_fileName), true).NormalizeWhitespace().WithLeadingTrivia(SyntaxFactory.CarriageReturnLineFeed))))
 					.WithCloseBraceToken(SyntaxFactory.Token(SyntaxKind.CloseBraceToken).WithLeadingTrivia(SyntaxFactory.Trivia(SyntaxFactory.LineDirectiveTrivia(SyntaxFactory.Token(SyntaxKind.HiddenKeyword), true).NormalizeWhitespace().WithLeadingTrivia(SyntaxFactory.CarriageReturnLineFeed))))
 					;
 
