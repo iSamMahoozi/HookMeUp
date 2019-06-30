@@ -2,201 +2,158 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Reflection;
 using System.Text.RegularExpressions;
-using HookMeUp;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
+using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
 
 namespace Hookr.Strut {
-	internal class Strutter : IDisposable {
-		private readonly SyntaxTree _tree;
-		private CompilationUnitSyntax _root;
-
-		private Dictionary<MethodDeclarationSyntax, MethodDeclarationSyntax> _methodReplacements;
-
-		private readonly string _hookContextName;
-		private readonly string _orgMethodLambdaName;
+	internal sealed class Strutter : IDisposable {
 		private readonly string _fileName;
-
-		public Strutter() {
-			_hookContextName = "hookContext";
-			_orgMethodLambdaName = "orgMethodBody";
-			_methodReplacements = new Dictionary<MethodDeclarationSyntax, MethodDeclarationSyntax>();
-		}
-
-		public Strutter(string fileName, string fileContent) : this() {
+		public Strutter(string fileName) {
 			_fileName = fileName;
-
-			var syntax = SourceText.From(fileContent);
-			_tree = SyntaxFactory.ParseSyntaxTree(syntax);
-			_root = _tree.GetRoot() as CompilationUnitSyntax;
 		}
 
-		private ExpressionStatementSyntax InvokeHookingContextStatement(string methodName, string ex = null) {
-			var args = new List<ArgumentSyntax> {
-				SyntaxFactory.Argument(SyntaxFactory.IdentifierName(_hookContextName))
-			};
-			if (ex != null) {
-				args.Add(SyntaxFactory.Argument(SyntaxFactory.IdentifierName(ex)));
+		public void Strut() {
+			if (File.Exists(_fileName)) {
+				var fileContent = File.ReadAllText(_fileName);
+				var node = new StrutMethod(fileContent).Visit();
+				var generatedFile = Regex.Replace(_fileName, ".cs$", ".g.cs");
+				File.WriteAllText(generatedFile, node.ToFullString());
+			}
+		}
+
+		#region dispose pattern
+		#region IDisposable
+		public void Dispose() => Dispose(true);
+		#endregion
+
+		private volatile bool _disposed = false;
+		private void Dispose(bool disposing) {
+			if (_disposed) {
+				return;
 			}
 
-			return SyntaxFactory.ExpressionStatement(
-				SyntaxFactory.InvocationExpression(
-					SyntaxFactory.MemberAccessExpression(
-						SyntaxKind.SimpleMemberAccessExpression,
-						SyntaxFactory.IdentifierName(nameof(Pimp)),
-						SyntaxFactory.IdentifierName(methodName)),
-					SyntaxFactory.ArgumentList(
-						SyntaxFactory.SeparatedList(args)
-						)
-					)
-				)
-				.NormalizeWhitespace()
-				.WithLeadingTrivia(SyntaxFactory.CarriageReturnLineFeed);
+			if (disposing) {
+			}
+
+			_disposed = true;
+		}
+		#endregion
+	}
+
+	internal class StrutMethod : CSharpSyntaxRewriter {
+		private readonly SyntaxTree _tree;
+
+		private readonly string _hookContextName = "hookContext";
+
+		public StrutMethod(string fileContent) {
+			var syntax = SourceText.From(fileContent);
+			_tree = ParseSyntaxTree(syntax);
 		}
 
-		private void InjectIntoMethod(MethodDeclarationSyntax method) {
-			var thisArgument = SyntaxFactory.Argument(SyntaxFactory.ThisExpression());
-			var nullArgument = SyntaxFactory.Argument(SyntaxFactory.IdentifierName("null"));
-			var currentMethodArgument = SyntaxFactory.Argument(SyntaxFactory.InvocationExpression(SyntaxFactory.MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, SyntaxFactory.IdentifierName(nameof(MethodBase)), SyntaxFactory.IdentifierName(nameof(MethodBase.GetCurrentMethod)))));
+		public SyntaxNode Visit() => base.Visit(_tree.GetRoot());
 
-			var hookContext = SyntaxFactory.LocalDeclarationStatement(
-				SyntaxFactory.VariableDeclaration(
-					SyntaxFactory.IdentifierName("var"))
-				.WithVariables(
-					SyntaxFactory.SingletonSeparatedList<VariableDeclaratorSyntax>(
-						SyntaxFactory.VariableDeclarator(
-							SyntaxFactory.Identifier(_hookContextName))
-						.WithInitializer(
-							SyntaxFactory.EqualsValueClause(
-								SyntaxFactory.ObjectCreationExpression(
-									SyntaxFactory.IdentifierName(nameof(HookingContext)))
-								.WithArgumentList(
-									SyntaxFactory.ArgumentList(
-										SyntaxFactory.SeparatedList(
-											new[]{
-													method.Modifiers.Any(x => x.ValueText == "static") ? nullArgument : thisArgument,
-													currentMethodArgument
-											})
-										)
-									)
+		public override SyntaxNode VisitMethodDeclaration(MethodDeclarationSyntax node) {
+			base.VisitMethodDeclaration(node);
+
+			var localMethodName = $"{node.Identifier.Text}_{Guid.NewGuid().ToString("N")}";
+
+			var tryStatement = TryStatement(
+				Block(
+					(node.ReturnType as PredefinedTypeSyntax)?.Keyword.Kind() == SyntaxKind.VoidKeyword ?
+						(StatementSyntax)ExpressionStatement(InvocationExpression(IdentifierName(localMethodName))) :
+						(StatementSyntax)ExpressionStatement(InvocationExpression(MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, IdentifierName(_hookContextName), IdentifierName(nameof(HookMeUp.HookingContext.WithReturnValue)))).WithArgumentList(ArgumentList(SingletonSeparatedList(Argument(InvocationExpression(IdentifierName(localMethodName)))))))
+					),
+				List(
+					new[] {
+				CatchClause(
+					CatchDeclaration(
+						IdentifierName(nameof(Exception)),
+						Identifier("ex")).NormalizeWhitespace(),
+					null,
+					Block(InvokePimpMethod(nameof(HookMeUp.Pimp.OnException), "ex").WithTrailingTrivia(CarriageReturnLineFeed)))
+						}),
+				FinallyClause(Block(InvokePimpMethod(nameof(HookMeUp.Pimp.OnExit)).WithTrailingTrivia(CarriageReturnLineFeed))))
+				;
+
+			var statements = new List<StatementSyntax> {
+			GetHookContextDeclaration(node),
+			InvokePimpMethod(nameof(HookMeUp.Pimp.OnEnter)),
+				tryStatement,
+			};
+			if ((node.ReturnType as PredefinedTypeSyntax)?.Keyword.Kind() != SyntaxKind.VoidKeyword) {
+				statements.Add(ReturnStatement(CastExpression(node.ReturnType, MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, IdentifierName(_hookContextName), IdentifierName(nameof(HookMeUp.HookingContext.ReturnValue))))));
+			}
+			statements.Add(GetLocalFunc(node, localMethodName));
+
+			return node
+				.WithExpressionBody(null)
+				.WithBody(Block(statements).NormalizeWhitespace())
+				.WithSemicolonToken(MissingToken(SyntaxKind.SemicolonToken))
+				;
+		}
+
+		private LocalFunctionStatementSyntax GetLocalFunc(MethodDeclarationSyntax method, string localMethodName) {
+			return LocalFunctionStatement(method.ReturnType, Identifier(localMethodName))
+				.WithBody(method.Body)
+				.WithExpressionBody(method.ExpressionBody)
+				.WithSemicolonToken(method.SemicolonToken)
+				;
+		}
+		private LocalDeclarationStatementSyntax GetHookContextDeclaration(MethodDeclarationSyntax method) {
+			var thisArgument = Argument(ThisExpression());
+			var nullArgument = Argument(LiteralExpression(SyntaxKind.NullLiteralExpression));
+			var currentMethodArgument = Argument(InvocationExpression(MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, IdentifierName(typeof(System.Reflection.MethodBase).FullName), IdentifierName(nameof(System.Reflection.MethodBase.GetCurrentMethod)))));
+
+			return LocalDeclarationStatement(
+				VariableDeclaration(
+					IdentifierName("var"))
+					.WithVariables(
+					SingletonSeparatedList(
+				VariableDeclarator(
+					Identifier(_hookContextName))
+				.WithInitializer(
+					EqualsValueClause(
+						ObjectCreationExpression(
+							IdentifierName(typeof(HookMeUp.HookingContext).FullName))
+						.WithArgumentList(
+							ArgumentList(
+								SeparatedList(
+									new[]{
+									method.Modifiers.Any(x => x.ValueText == "static") ? nullArgument : thisArgument,
+									currentMethodArgument
+									})
 								)
 							)
 						)
 					)
 				)
-				.NormalizeWhitespace()
-				;
+			)
+		);
 
-			var fileLinePos = _tree.GetLineSpan(method.Body != null ? method.Body.Statements.First().Span : method.ExpressionBody.Span);
-			var startLinePos = fileLinePos.StartLinePosition;
-			//var endLinePos = fileLinePos.EndLinePosition;
-			var startLine = startLinePos.Line;
-			var startCol = startLinePos.Character;
-			//var endLine = endLinePos.Line;
-			//var endCol = endLinePos.Character;
-
-			CSharpSyntaxNode lamdbaExpression;
-			if (method.Body?.Statements.Any() ?? false) {
-				lamdbaExpression = SyntaxFactory.Block(method.Body.Statements)
-					.WithOpenBraceToken(SyntaxFactory.Token(SyntaxKind.OpenBraceToken).WithTrailingTrivia(SyntaxFactory.Trivia(SyntaxFactory.LineDirectiveTrivia(SyntaxFactory.Literal(startLine), SyntaxFactory.Literal(_fileName), true).NormalizeWhitespace().WithLeadingTrivia(SyntaxFactory.CarriageReturnLineFeed))))
-					.WithCloseBraceToken(SyntaxFactory.Token(SyntaxKind.CloseBraceToken).WithLeadingTrivia(SyntaxFactory.Trivia(SyntaxFactory.LineDirectiveTrivia(SyntaxFactory.Token(SyntaxKind.HiddenKeyword), true).NormalizeWhitespace().WithLeadingTrivia(SyntaxFactory.CarriageReturnLineFeed))))
-					;
-
-			} else {
-				lamdbaExpression = method.ExpressionBody.Expression;
-			}
-			var actionOrFunc = SyntaxFactory.LocalDeclarationStatement(
-				SyntaxFactory.VariableDeclaration(
-					(method.ReturnType as PredefinedTypeSyntax)?.Keyword.Kind() == SyntaxKind.VoidKeyword ? (SimpleNameSyntax)SyntaxFactory.IdentifierName("Action") : (SimpleNameSyntax)SyntaxFactory.GenericName(
-						SyntaxFactory.Identifier("Func"))
-					.WithTypeArgumentList(
-						SyntaxFactory.TypeArgumentList(
-							SyntaxFactory.SingletonSeparatedList<TypeSyntax>(method.ReturnType))),
-					SyntaxFactory.SingletonSeparatedList(
-						SyntaxFactory.VariableDeclarator(_orgMethodLambdaName).WithInitializer(SyntaxFactory.EqualsValueClause(SyntaxFactory.ParenthesizedLambdaExpression(lamdbaExpression)))
-						)))
-				.NormalizeWhitespace()
-				.WithLeadingTrivia(SyntaxFactory.Trivia(SyntaxFactory.LineDirectiveTrivia(SyntaxFactory.Token(SyntaxKind.HiddenKeyword), true).NormalizeWhitespace().WithLeadingTrivia(SyntaxFactory.CarriageReturnLineFeed)));
-
-			var tryStatement = SyntaxFactory.TryStatement(
-				SyntaxFactory.Block(
-					(method.ReturnType as PredefinedTypeSyntax)?.Keyword.Kind() == SyntaxKind.VoidKeyword ?
-						(StatementSyntax)SyntaxFactory.ExpressionStatement(SyntaxFactory.InvocationExpression(SyntaxFactory.IdentifierName(_orgMethodLambdaName))) :
-						(StatementSyntax)SyntaxFactory.ExpressionStatement(SyntaxFactory.InvocationExpression(SyntaxFactory.MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, SyntaxFactory.IdentifierName(_hookContextName), SyntaxFactory.IdentifierName(nameof(HookingContext.WithReturnValue)))).WithArgumentList(SyntaxFactory.ArgumentList(SyntaxFactory.SingletonSeparatedList(SyntaxFactory.Argument(SyntaxFactory.InvocationExpression(SyntaxFactory.IdentifierName(_orgMethodLambdaName)))))))
-						//(StatementSyntax)SyntaxFactory.ReturnStatement(SyntaxFactory.InvocationExpression(SyntaxFactory.IdentifierName(_orgMethodLambdaName)))
-						.NormalizeWhitespace()
-						.WithLeadingTrivia(SyntaxFactory.CarriageReturnLineFeed)
-						.WithTrailingTrivia(SyntaxFactory.CarriageReturnLineFeed)
-					),
-				SyntaxFactory.List<CatchClauseSyntax>(
-					new[] {
-				SyntaxFactory.CatchClause(
-					SyntaxFactory.CatchDeclaration(
-						SyntaxFactory.IdentifierName(nameof(Exception)),
-						SyntaxFactory.Identifier("ex")).NormalizeWhitespace(),
-					null,
-					SyntaxFactory.Block(InvokeHookingContextStatement(nameof(Pimp.OnException), "ex").WithTrailingTrivia(SyntaxFactory.CarriageReturnLineFeed)))
-						}),
-				SyntaxFactory.FinallyClause(SyntaxFactory.Block(InvokeHookingContextStatement(nameof(Pimp.OnExit)).WithTrailingTrivia(SyntaxFactory.CarriageReturnLineFeed))))
-				.WithLeadingTrivia(SyntaxFactory.CarriageReturnLineFeed)
-				.WithTrailingTrivia(SyntaxFactory.CarriageReturnLineFeed)
-				;
-
-			var statements = new List<StatementSyntax> {
-				actionOrFunc,
-				hookContext,
-				InvokeHookingContextStatement(nameof(Pimp.OnEnter)),
-				tryStatement
+		}
+		private ExpressionStatementSyntax InvokePimpMethod(string methodName, string ex = null) {
+			var args = new List<ArgumentSyntax> {
+				Argument(IdentifierName(_hookContextName))
 			};
-			if ((method.ReturnType as PredefinedTypeSyntax)?.Keyword.Kind() != SyntaxKind.VoidKeyword) {
-				statements.Add(SyntaxFactory.ReturnStatement(SyntaxFactory.CastExpression(method.ReturnType, SyntaxFactory.MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, SyntaxFactory.IdentifierName(_hookContextName), SyntaxFactory.IdentifierName(nameof(HookingContext.ReturnValue))))));
+			if (ex != null) {
+				args.Add(Argument(IdentifierName(ex)));
 			}
 
-			BlockSyntax newMethodBody = SyntaxFactory.Block(statements).WithTrailingTrivia(SyntaxFactory.CarriageReturnLineFeed);
-			var newMethod = SyntaxFactory.MethodDeclaration(method.AttributeLists, method.Modifiers, method.ReturnType, method.ExplicitInterfaceSpecifier, method.Identifier, method.TypeParameterList, method.ParameterList, method.ConstraintClauses, newMethodBody, null);
-
-			_methodReplacements[method] = newMethod;
-		}
-
-		private IEnumerable<MethodDeclarationSyntax> _Methods => _root.DescendantNodes().OfType<MethodDeclarationSyntax>();
-		public Strutter InjectIntoMethods() {
-			foreach (var method in _Methods) {
-				InjectIntoMethod(method);
-			}
-
-			return this;
-		}
-		public Strutter ReplaceMethods() {
-			if (_methodReplacements.Any()) {
-				_root = _root.ReplaceNodes(_Methods, (o, n) => _methodReplacements[o])
-					.AddUsings(
-						SyntaxFactory.UsingDirective(SyntaxFactory.IdentifierName("HookMeUp")),
-						SyntaxFactory.UsingDirective(SyntaxFactory.IdentifierName("System.Reflection")))
-					.NormalizeWhitespace();
-			}
-
-			return this;
-		}
-		public Strutter WriteAllToFile(string inputFilename) {
-			var generatedFile = Regex.Replace(inputFilename, ".cs$", ".g.cs");
-			File.WriteAllText(generatedFile, _root.ToFullString());
-
-			return this;
-		}
-
-		private object ToDump() => _root.ToFullString();
-
-		public void Dispose() {
-			Dispose(true);
-		}
-
-		protected virtual void Dispose(bool disposing) {
-			if (disposing) {
-			}
+			return ExpressionStatement(
+				InvocationExpression(
+					MemberAccessExpression(
+						SyntaxKind.SimpleMemberAccessExpression,
+						IdentifierName(typeof(HookMeUp.Pimp).FullName),
+						IdentifierName(methodName)),
+					ArgumentList(
+						SeparatedList(args)
+						)
+					)
+				);
 		}
 	}
 }

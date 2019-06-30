@@ -1,5 +1,4 @@
 ﻿using System;
-using System.IO;
 
 namespace Hookr.Strut {
 	internal class Program {
@@ -8,15 +7,10 @@ namespace Hookr.Strut {
 			Console.WriteLine("Attach debgger now");
 			Console.ReadLine();
 #endif
-			if (args.Length > 0 && File.Exists(args[0])) {
-				var fileContent = File.ReadAllText(args[0]);
-				using (var strut = new Strutter(args[0], fileContent)) {
-					strut
-						.InjectIntoMethods()
-						.ReplaceMethods()
-						.WriteAllToFile(args[0]);
+			if (args.Length > 0) {
+				using (var strut = new Strutter(args[0])) {
+					strut.Strut();
 				}
-
 			}
 		}
 	}
