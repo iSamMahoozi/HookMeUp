@@ -9,7 +9,6 @@ namespace TestStaticAspectInjection {
 			}
 
 			Console.ReadLine();
-
 		}
 
 		public static int Sum(int x, int y) {

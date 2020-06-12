@@ -1,14 +1,12 @@
 ﻿using System;
+using System.ComponentModel.Composition;
 using HookMeUp;
 
-namespace TestStaticAspectInjection
-{
-    internal class LoggingHook : Hook
-    {
-        public override void OnEnter(HookingContext context)
-        {
-#warning As a test we are simply replacing {{VALUE}} with Hello World
-            Console.WriteLine("{{VALUE}}");
-        }
-    }
+namespace TestStaticAspectInjection {
+	[Export(typeof(IHook))]
+	internal class LoggingHook : Hook {
+		public override void OnEnter(HookingContext context) {
+			Console.WriteLine($"enter {context.Method}");
+		}
+	}
 }

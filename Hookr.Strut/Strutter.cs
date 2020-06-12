@@ -19,7 +19,7 @@ namespace Hookr.Strut {
 		public void Strut() {
 			if (File.Exists(_fileName)) {
 				var fileContent = File.ReadAllText(_fileName);
-				var node = new StrutMethod(fileContent).Visit();
+				var node = new SyntaxRewriter(_fileName, fileContent).Visit();
 				var generatedFile = Regex.Replace(_fileName, ".cs$", ".g.cs");
 				File.WriteAllText(generatedFile, node.ToFullString());
 			}
@@ -42,118 +42,123 @@ namespace Hookr.Strut {
 			_disposed = true;
 		}
 		#endregion
-	}
 
-	internal class StrutMethod : CSharpSyntaxRewriter {
-		private readonly SyntaxTree _tree;
+		private class SyntaxRewriter : CSharpSyntaxRewriter {
+			private readonly string _fileName;
+			private readonly SyntaxTree _tree;
 
-		private readonly string _hookContextName = "hookContext";
+			private readonly string _hookContextName = "hookContext";
 
-		public StrutMethod(string fileContent) {
-			var syntax = SourceText.From(fileContent);
-			_tree = ParseSyntaxTree(syntax);
-		}
+			public SyntaxRewriter(string filename, string fileContent) {
+				_fileName = filename;
 
-		public SyntaxNode Visit() => base.Visit(_tree.GetRoot());
+				var syntax = SourceText.From(fileContent);
+				_tree = ParseSyntaxTree(syntax);
+			}
 
-		public override SyntaxNode VisitMethodDeclaration(MethodDeclarationSyntax node) {
-			base.VisitMethodDeclaration(node);
+			public SyntaxNode Visit() => base.Visit(_tree.GetRoot());
 
-			var localMethodName = $"{node.Identifier.Text}_{Guid.NewGuid().ToString("N")}";
+			public override SyntaxNode VisitMethodDeclaration(MethodDeclarationSyntax node) {
+				base.VisitMethodDeclaration(node);
 
-			var tryStatement = TryStatement(
-				Block(
-					(node.ReturnType as PredefinedTypeSyntax)?.Keyword.Kind() == SyntaxKind.VoidKeyword ?
-						(StatementSyntax)ExpressionStatement(InvocationExpression(IdentifierName(localMethodName))) :
-						(StatementSyntax)ExpressionStatement(InvocationExpression(MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, IdentifierName(_hookContextName), IdentifierName(nameof(HookMeUp.HookingContext.WithReturnValue)))).WithArgumentList(ArgumentList(SingletonSeparatedList(Argument(InvocationExpression(IdentifierName(localMethodName)))))))
-					),
-				List(
-					new[] {
+				var localMethodName = $"{node.Identifier.Text}_{Guid.NewGuid().ToString("N")}";
+
+				var tryStatement = TryStatement(
+					Block(
+						(node.ReturnType as PredefinedTypeSyntax)?.Keyword.Kind() == SyntaxKind.VoidKeyword ?
+							(StatementSyntax)ExpressionStatement(InvocationExpression(IdentifierName(localMethodName))) :
+							(StatementSyntax)ExpressionStatement(InvocationExpression(MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, IdentifierName(_hookContextName), IdentifierName(nameof(HookMeUp.HookingContext.WithReturnValue)))).WithArgumentList(ArgumentList(SingletonSeparatedList(Argument(InvocationExpression(IdentifierName(localMethodName)))))))
+						),
+					List(
+						new[] {
 				CatchClause(
 					CatchDeclaration(
 						IdentifierName(nameof(Exception)),
 						Identifier("ex")).NormalizeWhitespace(),
 					null,
 					Block(InvokePimpMethod(nameof(HookMeUp.Pimp.OnException), "ex").WithTrailingTrivia(CarriageReturnLineFeed)))
-						}),
-				FinallyClause(Block(InvokePimpMethod(nameof(HookMeUp.Pimp.OnExit)).WithTrailingTrivia(CarriageReturnLineFeed))))
-				;
+							}),
+					FinallyClause(Block(InvokePimpMethod(nameof(HookMeUp.Pimp.OnExit)).WithTrailingTrivia(CarriageReturnLineFeed))))
+					;
 
-			var statements = new List<StatementSyntax> {
-			GetHookContextDeclaration(node),
-			InvokePimpMethod(nameof(HookMeUp.Pimp.OnEnter)),
-				tryStatement,
-			};
-			if ((node.ReturnType as PredefinedTypeSyntax)?.Keyword.Kind() != SyntaxKind.VoidKeyword) {
-				statements.Add(ReturnStatement(CastExpression(node.ReturnType, MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, IdentifierName(_hookContextName), IdentifierName(nameof(HookMeUp.HookingContext.ReturnValue))))));
+				var statements = new List<StatementSyntax> {
+					GetHookContextDeclaration(node).WithLeadingTrivia(Trivia(LineDirectiveTrivia(Token(SyntaxKind.HiddenKeyword), true))),
+					InvokePimpMethod(nameof(HookMeUp.Pimp.OnEnter)),
+					tryStatement,
+				};
+				if ((node.ReturnType as PredefinedTypeSyntax)?.Keyword.Kind() != SyntaxKind.VoidKeyword) {
+					statements.Add(ReturnStatement(CastExpression(node.ReturnType, MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, IdentifierName(_hookContextName), IdentifierName(nameof(HookMeUp.HookingContext.ReturnValue))))));
+				}
+				statements.Add(GetLocalFunc(node, localMethodName));
+
+				return node
+					.WithExpressionBody(null)
+					.WithBody(Block(statements).NormalizeWhitespace())
+					.WithSemicolonToken(MissingToken(SyntaxKind.SemicolonToken))
+					;
 			}
-			statements.Add(GetLocalFunc(node, localMethodName));
 
-			return node
-				.WithExpressionBody(null)
-				.WithBody(Block(statements).NormalizeWhitespace())
-				.WithSemicolonToken(MissingToken(SyntaxKind.SemicolonToken))
-				;
-		}
+			private LocalFunctionStatementSyntax GetLocalFunc(MethodDeclarationSyntax method, string localMethodName) {
+				var lineNumber = _tree.GetLineSpan(method.FullSpan).StartLinePosition.Line;
 
-		private LocalFunctionStatementSyntax GetLocalFunc(MethodDeclarationSyntax method, string localMethodName) {
-			return LocalFunctionStatement(method.ReturnType, Identifier(localMethodName))
-				.WithBody(method.Body)
-				.WithExpressionBody(method.ExpressionBody)
-				.WithSemicolonToken(method.SemicolonToken)
-				;
-		}
-		private LocalDeclarationStatementSyntax GetHookContextDeclaration(MethodDeclarationSyntax method) {
-			var thisArgument = Argument(ThisExpression());
-			var nullArgument = Argument(LiteralExpression(SyntaxKind.NullLiteralExpression));
-			var currentMethodArgument = Argument(InvocationExpression(MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, IdentifierName(typeof(System.Reflection.MethodBase).FullName), IdentifierName(nameof(System.Reflection.MethodBase.GetCurrentMethod)))));
+				return LocalFunctionStatement(method.ReturnType, Identifier(localMethodName))
+					.WithExpressionBody(method.ExpressionBody)
+					.WithSemicolonToken(method.SemicolonToken)
+					.WithBody(method.Body?.WithLeadingTrivia(Trivia(LineDirectiveTrivia(Literal(lineNumber), Literal(_fileName), true))))
+					;
+			}
+			private LocalDeclarationStatementSyntax GetHookContextDeclaration(MethodDeclarationSyntax method) {
+				var thisArgument = Argument(ThisExpression());
+				var nullArgument = Argument(LiteralExpression(SyntaxKind.NullLiteralExpression));
+				var currentMethodArgument = Argument(InvocationExpression(MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, IdentifierName(typeof(System.Reflection.MethodBase).FullName), IdentifierName(nameof(System.Reflection.MethodBase.GetCurrentMethod)))));
 
-			return LocalDeclarationStatement(
-				VariableDeclaration(
-					IdentifierName("var"))
-					.WithVariables(
-					SingletonSeparatedList(
-				VariableDeclarator(
-					Identifier(_hookContextName))
-				.WithInitializer(
-					EqualsValueClause(
-						ObjectCreationExpression(
-							IdentifierName(typeof(HookMeUp.HookingContext).FullName))
-						.WithArgumentList(
-							ArgumentList(
-								SeparatedList(
-									new[]{
+				return LocalDeclarationStatement(
+					VariableDeclaration(
+						IdentifierName("var"))
+						.WithVariables(
+						SingletonSeparatedList(
+					VariableDeclarator(
+						Identifier(_hookContextName))
+					.WithInitializer(
+						EqualsValueClause(
+							ObjectCreationExpression(
+								IdentifierName(typeof(HookMeUp.HookingContext).FullName))
+							.WithArgumentList(
+								ArgumentList(
+									SeparatedList(
+										new[]{
 									method.Modifiers.Any(x => x.ValueText == "static") ? nullArgument : thisArgument,
 									currentMethodArgument
-									})
+										})
+									)
 								)
 							)
 						)
 					)
 				)
-			)
-		);
+			);
 
-		}
-		private ExpressionStatementSyntax InvokePimpMethod(string methodName, string ex = null) {
-			var args = new List<ArgumentSyntax> {
+			}
+			private ExpressionStatementSyntax InvokePimpMethod(string methodName, string ex = null) {
+				var args = new List<ArgumentSyntax> {
 				Argument(IdentifierName(_hookContextName))
 			};
-			if (ex != null) {
-				args.Add(Argument(IdentifierName(ex)));
-			}
+				if (ex != null) {
+					args.Add(Argument(IdentifierName(ex)));
+				}
 
-			return ExpressionStatement(
-				InvocationExpression(
-					MemberAccessExpression(
-						SyntaxKind.SimpleMemberAccessExpression,
-						IdentifierName(typeof(HookMeUp.Pimp).FullName),
-						IdentifierName(methodName)),
-					ArgumentList(
-						SeparatedList(args)
+				return ExpressionStatement(
+					InvocationExpression(
+						MemberAccessExpression(
+							SyntaxKind.SimpleMemberAccessExpression,
+							IdentifierName(typeof(HookMeUp.Pimp).FullName),
+							IdentifierName(methodName)),
+						ArgumentList(
+							SeparatedList(args)
+							)
 						)
-					)
-				);
+					);
+			}
 		}
 	}
 }

@@ -4,6 +4,8 @@ namespace HookMeUp {
 	// TODO: This class needs to provide the actual "static" HookPoint, as well as information about the current context (ex: the instance, arguments if in a method, etc.), in addition to Hook Flow Control
 	public class HookingContext {
 		public HookingContext(object instance, MethodBase method) {
+			Target = instance;
+			Method = method;
 
 		}
 
@@ -15,5 +17,7 @@ namespace HookMeUp {
 		public object ReturnValue { get; private set; }
 		public HookPoint HookPoint { get; }
 		public HookFlow Flow { get; }
+		public object Target { get; }
+		public MethodBase Method { get; }
 	}
 }
