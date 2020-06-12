@@ -6,7 +6,7 @@ namespace TestStaticAspectInjection {
 	[Export(typeof(IHook))]
 	internal class LoggingHook : Hook {
 		public override void OnEnter(HookingContext context) {
-			Console.WriteLine($"enter {context.Method}");
+			Console.WriteLine($"enter {context.HookPoint.Method}");
 		}
 	}
 }
