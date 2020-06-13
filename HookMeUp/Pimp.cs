@@ -30,7 +30,7 @@ namespace HookMeUp {
 
 		public static void OnEnter(HookingContext context) {
 			if (Hooks != null) {
-				foreach (var hook in Hooks.Where(x => x.ShouldHook(context.HookPoint)) {
+				foreach (var hook in Hooks.Where(x => x.ShouldHook(context.HookPoint))) {
 					hook.OnEnter(context);
 				}
 			}
@@ -38,7 +38,7 @@ namespace HookMeUp {
 
 		public static void OnExit(HookingContext context) {
 			if (Hooks != null) {
-				foreach (var hook in Hooks.Where(x => x.ShouldHook(context.HookPoint)) {
+				foreach (var hook in Hooks.Where(x => x.ShouldHook(context.HookPoint))) {
 					hook.OnExit(context);
 				}
 			}
@@ -46,7 +46,7 @@ namespace HookMeUp {
 
 		public static void OnException(HookingContext context, Exception ex) {
 			if (Hooks != null) {
-				foreach (var hook in Hooks.Where(x => x.ShouldHook(context.HookPoint)) {
+				foreach (var hook in Hooks.Where(x => x.ShouldHook(context.HookPoint))) {
 					hook.HandleException(context, ex, false);
 				}
 			}
